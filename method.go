@@ -14,7 +14,7 @@ import (
     "net/url"
     //"net/http/httptrace"
     "os"
-    //"strconv"
+    "strconv"
     //"strings"
 )
 
@@ -36,7 +36,7 @@ func NewCloudflaredMethod(output io.Writer, input *bufio.Reader, logFilename str
     // The Client we use by default is the standard default client
     client := &http.Client{}
 
-    // TODO: Create the logger
+    // TODO: Only log when needed
     logger = nil
     return &CloudflaredMethod{
         logger,
@@ -56,7 +56,7 @@ func (c *CloudflaredMethod) Run() error {
         msg, err := mreader.ReadMessage()
         if err != nil {
             if err == io.EOF || err == io.ErrClosedPipe {
-                return err
+                return nil
             }
             
             if !(err == io.ErrNoProgress || err == io.ErrShortBuffer) {
@@ -66,7 +66,7 @@ func (c *CloudflaredMethod) Run() error {
 
         switch msg.StatusCode {
         case 600: // Acquire URL
-            go c.HandleAcquire(msg)
+            c.HandleAcquire(msg)
         case 601: // Configuration
             c.ParseConfig(msg)
         default:
@@ -100,25 +100,37 @@ func (cfd *CloudflaredMethod) HandleAcquire(msg *Message) error {
         uri.Scheme = "https"
         cfd.mwriter.Warning("URI Scheme 'cfd' should not be used. Defaulting to cfd+https")
     default:
-        cfd.mwriter.FailedURI(uri.String(), "", fmt.Sprintf("Invalid URI Scheme: %s", uri.Scheme), false, false)
+        cfd.mwriter.FailedURI(requestedURL, "", fmt.Sprintf("Invalid URI Scheme: %s", uri.Scheme), false, false)
     }
 
     // TODO: Get the token from Cloudflared
     // TODO: Let APT know we're getting the thing
-
     resp, err := cfd.Client.Get(uri.String())
     if err != nil {
-        cfd.mwriter.FailedURI(uri.String(), "", err.Error(), false, false)
+        cfd.mwriter.FailedURI(requestedURL, "", err.Error(), false, false)
         return err
     }
     // Handle non-200 responses
     // TODO: Handle other 200 codes
     if resp.StatusCode != 200 {
-        cfd.mwriter.FailedURI(uri.String(), "", resp.Status, false, false)
+        cfd.mwriter.FailedURI(requestedURL, "", resp.Status, false, false)
         return fmt.Errorf("GET for %s failed with %s", uri.String(), resp.Status)
     }
 
-    // TODO: Write a Start URI message
+    var size uint64
+    // Check for header: Content-Length
+    sizeHeader, ok := resp.Header["Content-Length"]
+    if ok {
+        // Base 10, 64 bits
+        size, err = strconv.ParseUint(sizeHeader[0], 10, 64)
+        if err != nil {
+            log.Printf("Error parsing Content-Length: %s\n", err.Error())
+            size = 0
+        }
+    } else {
+        size = 0
+    }
+    cfd.mwriter.StartURI(requestedURL, "", size, false)
 
     // Close the body at the end of the method
     defer resp.Body.Close()
@@ -161,7 +173,7 @@ func (cfd *CloudflaredMethod) HandleAcquire(msg *Message) error {
         }
     }
 
-    cfd.mwriter.FinishURI(uri.String(), filename, "", "", false, false)
+    cfd.mwriter.FinishURI(requestedURL, filename, "", "", false, false)
 
     return nil
 }
