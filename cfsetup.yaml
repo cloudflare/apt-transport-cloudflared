@@ -1,0 +1,27 @@
+build_dir: &build_dir /cfsetup_build/src/github.com/cloudflare/apt-transport-cloudflared
+build_deps: &build_deps
+  - go
+  - gcc
+  - build-essential
+
+default-flavor: stretch
+
+jessie: &setup
+  build:
+    build_dir: *build_dir
+    builddeps: *build_deps
+    post-cache:
+      - export GOPATH=/cfsetup_build/
+      - sudo chown $(whoami) /cfsetup_build/
+      - make cfd+https
+  test:
+    build_dir: *build_dir
+    builddeps: *build_deps
+    post-cache:
+      - export GOPATH=/cfsetup_build/
+      - sudo chown $(whoami) /cfsetup_build/
+      - make test
+
+stretch: *setup
+squeeze: *setup
+
