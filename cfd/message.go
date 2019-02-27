@@ -255,7 +255,7 @@ func (mw *MessageWriter) StartURI(uri, resumePoint string, size uint64, usedMirr
 }
 
 // Write a '201 URI Done' message
-func (mw *MessageWriter) FinishURI(uri, filename, resumePoint, altIMSHit string, imsHit, usedMirror bool) {
+func (mw *MessageWriter) FinishURI(uri, filename, resumePoint, altIMSHit string, imsHit, usedMirror bool, extra []string) {
     fmt.Fprintf(mw.w, "201 URI Done\nURI: %s\nFilename: %s\n", uri, filename)
     if resumePoint != "" {
         fmt.Fprintf(mw.w, "Resume-Point: %s\n", resumePoint)
@@ -269,6 +269,13 @@ func (mw *MessageWriter) FinishURI(uri, filename, resumePoint, altIMSHit string,
     if usedMirror {
         mw.w.Write([]byte("UsedMirror: true\n"))
     }
+
+    // TODO: Make this better...
+    for _, s := range extra {
+        mw.w.Write([]byte(s))
+        mw.w.Write([]byte("\n"))
+    }
+
     mw.w.Write([]byte("\n"))
 }
 

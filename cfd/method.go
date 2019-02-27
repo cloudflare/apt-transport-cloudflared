@@ -2,6 +2,7 @@
 package main
 
 import (
+    "context"
     "crypto/md5"
     "crypto/sha1"
     "crypto/sha256"
@@ -14,8 +15,10 @@ import (
     "net/url"
     //"net/http/httptrace"
     "os"
+    "os/exec"
     "strconv"
     //"strings"
+    //"time"
 )
 
 const (
@@ -23,10 +26,16 @@ const (
 )
 
 type CloudflaredMethod struct {
+    Context  context.Context
     Log      *log.Logger
     Client   *http.Client
     mwriter  *MessageWriter
     mreader  *MessageReader
+}
+
+type HeaderEntry struct {
+    Key   string
+    Value string
 }
 
 // Create a new CloudflaredMethod
@@ -39,10 +48,10 @@ func NewCloudflaredMethod(output io.Writer, input *bufio.Reader, logFilename str
     // TODO: Only log when needed
     logger = nil
     return &CloudflaredMethod{
-        logger,
-        client,
-        NewMessageWriter(output),
-        NewMessageReader(input),
+        Log: logger,
+        Client: client,
+        mwriter: NewMessageWriter(output),
+        mreader: NewMessageReader(input),
     }, nil
 }
 
@@ -77,6 +86,34 @@ func (c *CloudflaredMethod) Run() error {
     return nil
 }
 
+func (cfd *CloudflaredMethod) GetToken(ctx context.Context, uri *url.URL) ([]HeaderEntry, error) {
+    // TODO: Support service tokens
+    // Steps:
+    //   1. Get the service token directory from the configuration message from Apt (default: ~/.cfd/servicetoken/)
+    //   2. Check if the host name given is present in the service token directory
+    //   3. Read the file and use that instead of using cloudflared
+    // For now though, just login with cloudflared
+    path := uri.Scheme + "://" + uri.Host
+    cfd.mwriter.Log(fmt.Sprintf("Getting token for %s", path))
+
+    login := exec.CommandContext(ctx, "cloudflared", "access", "login", path)
+    // TODO: Display the URL that cloudflared outputs
+    err := login.Run()
+    if err != nil {
+        return nil, err
+    }
+
+    cmd := exec.CommandContext(ctx, "cloudflared", "access", "token", "--app", path)
+    token, err := cmd.Output()
+    if err != nil {
+        return nil, err
+    }
+
+    cfd.mwriter.Log(fmt.Sprintf("Token fetched: %s", token))
+
+    return []HeaderEntry{HeaderEntry{"cf-access-token", string(token)}}, nil
+}
+
 // Handle the 600 Acquire URI message
 // TODO: Figure out what an IMS-Hit indicates, and if that applies to this method
 func (cfd *CloudflaredMethod) HandleAcquire(msg *Message) error {
@@ -103,9 +140,29 @@ func (cfd *CloudflaredMethod) HandleAcquire(msg *Message) error {
         cfd.mwriter.FailedURI(requestedURL, "", fmt.Sprintf("Invalid URI Scheme: %s", uri.Scheme), false, false)
     }
 
-    // TODO: Get the token from Cloudflared
+    // Fetch the token using cloudflared
+    // The context is used to cancel the cloudflared commands if they hang too long. Default should be 20 seconds
+    // TODO: Make this a header entry that supports both Bearer and Service tokens
+    headers, err := cfd.GetToken(context.TODO(), uri)
+    if err != nil {
+        cfd.mwriter.FailedURI(requestedURL, "", err.Error(), false, false)
+        return err
+    }
+
     // TODO: Let APT know we're getting the thing
-    resp, err := cfd.Client.Get(uri.String())
+
+    // Build our request
+    req, err := http.NewRequest("GET", uri.String(), nil)
+    if err != nil {
+        cfd.mwriter.FailedURI(requestedURL, "", err.Error(), false, false)
+        return err
+    }
+
+    for _, h := range headers {
+        req.Header.Set(h.Key, h.Value)
+    }
+    
+    resp, err := cfd.Client.Do(req)
     if err != nil {
         cfd.mwriter.FailedURI(requestedURL, "", err.Error(), false, false)
         return err
@@ -173,7 +230,18 @@ func (cfd *CloudflaredMethod) HandleAcquire(msg *Message) error {
         }
     }
 
-    cfd.mwriter.FinishURI(requestedURL, filename, "", "", false, false)
+    strMD5 := string(hashMD5.Sum(nil))
+    strSHA1 := string(hashSHA1.Sum(nil))
+    strSHA256 := string(hashSHA256.Sum(nil))
+    strSHA512 := string(hashSHA512.Sum(nil))
+
+    cfd.mwriter.FinishURI(requestedURL, filename, "", "", false, false, []string{
+        fmt.Sprintf("MD5-Hash: %x", strMD5),
+        fmt.Sprintf("MD5Sum-Hash: %x", strMD5),
+        fmt.Sprintf("SHA1-Hash: %x", strSHA1),
+        fmt.Sprintf("SHA256-Hash: %x", strSHA256),
+        fmt.Sprintf("SHA512-Hash: %x", strSHA512),
+    })
 
     return nil
 }
