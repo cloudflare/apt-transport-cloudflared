@@ -1,15 +1,14 @@
-
 package main
 
 import (
-    "bufio"
-    "os"
+	"bufio"
+	"os"
 )
 
 func main() {
-    cfd, err := NewCloudflaredMethod(os.Stdout, bufio.NewReader(os.Stdin), "")
-    if err != nil {
-        return
-    }
-    cfd.Run()
+	cfd, err := NewCloudflaredMethod(os.Stdout, bufio.NewReader(os.Stdin), "")
+	if err != nil {
+		return
+	}
+	cfd.Run()
 }

@@ -14,9 +14,13 @@ cfd+https: bin/cfd+https
 
 .PHONEY: test
 test:
-	go test ${IMPORT_PATH}/cmd/cfd
+	go test -coverprofile=cover.out -test.v ${IMPORT_PATH}/cmd/cfd
 
-bin/cfd+https:
+.PHONEY: fmt
+fmt:
+	gofmt -w cmd/cfd/*.go
+
+bin/cfd+https: cmd/cfd/*.go
 	go build -o bin/cfd+https ${IMPORT_PATH}/cmd/cfd
 
 
