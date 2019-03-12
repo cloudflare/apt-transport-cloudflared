@@ -9,30 +9,54 @@ import (
 	"strings"
 )
 
+// CapFlags represents a set of Apt Capabilities.
 type CapFlags int
 
 const (
+	// CapSingleInstance indicates to Apt that the method may only have one
+	// instance running at any given time.
 	CapSingleInstance CapFlags = 0x01
-	CapPipeline       CapFlags = 0x02
-	CapSendConfig     CapFlags = 0x04
-	CapLocalOnly      CapFlags = 0x08
-	CapNeedsCleanup   CapFlags = 0x10
-	CapRemovable      CapFlags = 0x20
-	CapAuxRequests    CapFlags = 0x40
-	CapDefault        CapFlags = CapSendConfig
+
+	// CapPipeline indicates to Apt that it may send multiple requests to the
+	// method without waiting for each one to finish.
+	CapPipeline CapFlags = 0x02
+
+	// CapSendConfig tells Apt to send a configuration message back with the
+	// config values.
+	CapSendConfig CapFlags = 0x04
+
+	// CapLocalOnly indicates to Apt that the resources are fetched locally.
+	CapLocalOnly CapFlags = 0x08
+
+	// CapNeedsCleanup tells Apt not to terminate the process when done.
+	CapNeedsCleanup CapFlags = 0x10
+
+	// CapRemovable tells Apt the method is working on a removable medium such
+	// as a CDROM or USB drive.
+	CapRemovable CapFlags = 0x20
+
+	// CapAuxRequests indicates to Apt that the method handles AuxRequests.
+	CapAuxRequests CapFlags = 0x40
+
+	// CapDefault is the default value that should be sent if the method has
+	// no special considerations.
+	CapDefault CapFlags = CapSendConfig
 )
 
+// Message represents a generic message as read from os.Stdin.
 type Message struct {
 	StatusCode  uint64
 	Description string
 	Fields      map[string]string
 }
 
+// Field represents a value field in a mesage.
 type Field struct {
 	Key   string
 	Value string
 }
 
+// NewMessage creates a new message with the given fields.
 func NewMessage(statusCode uint64, description string, fields ...Field) *Message {
 	fieldmap := make(map[string]string)
 	for _, field := range fields {
@@ -46,12 +70,15 @@ func NewMessage(statusCode uint64, description string, fields ...Field) *Message
 	}
 }
 
+// MessageReader implements an interface for reading messages from an input
+// stream.
 type MessageReader struct {
 	reader  *bufio.Reader
 	message *Message
 }
 
-// Create a new MessageReader
+// NewMessageReader creates a new MessageReader instance.
+//
 // This function sets the underlying bufio.Reader and sets the state such that
 // there is no currently processing message.
 func NewMessageReader(reader *bufio.Reader) *MessageReader {
@@ -61,6 +88,8 @@ func NewMessageReader(reader *bufio.Reader) *MessageReader {
 	}
 }
 
+// errorGroup is a helper function for creating an error that represents
+// several errors.
 func errorGroup(header string, errs []error) error {
 	var sb strings.Builder
 	sb.WriteString(header)
@@ -71,7 +100,8 @@ func errorGroup(header string, errs []error) error {
 	return errors.New(sb.String())
 }
 
-// Read a full message from the input
+// ReadMessage reads a full message from the input.
+//
 // This function calls MessageReader.ReadLine() until a Message is returned
 // and then returns that.
 func (r *MessageReader) ReadMessage() (*Message, error) {
@@ -100,7 +130,8 @@ func (r *MessageReader) ReadMessage() (*Message, error) {
 	return msg, nil
 }
 
-// Read a line from the input and process it
+// ReadLine reads a line from the input and processes it.
+//
 // This function will read exactly 1 line from the input Reader, and do one of
 // a few things depending on state and the value of the line.
 // If no Message is currently being parsed, then this method will attempt to
@@ -149,7 +180,8 @@ func (r *MessageReader) ReadLine() (*Message, error) {
 	return nil, nil
 }
 
-// Read a header from the input
+// readHeader reads a header from the input.
+//
 // This function will attempt to read a header line from the input. If the
 // line read is empty, this function returns (nil, nil). Otherwise it will
 // attempt to read an unsigned integer and then a description. Both must be
@@ -164,7 +196,7 @@ func (r *MessageReader) readHeader() (*Message, error) {
 	return ParseHeader(line)
 }
 
-// Parse a header out of the given string
+// ParseHeader attempts to parse a header out of the given string.
 func ParseHeader(line string) (*Message, error) {
 	line = strings.TrimSpace(line)
 	if line == "" {
@@ -196,24 +228,26 @@ func ParseHeader(line string) (*Message, error) {
 	return msg, nil
 }
 
-// Return the current message and set the message pointer to nil
+// commitMessage returns the current message and sets the message pointer to
+// nil.
 func (r *MessageReader) commitMessage(newmsg *Message) *Message {
 	msg := r.message
 	r.message = newmsg
 	return msg
 }
 
-// A wrapper around an io.Writer which writes APT messages
+// MessageWriter is a wrapper around an io.Writer which writes APT messages.
 type MessageWriter struct {
 	w io.Writer
 }
 
-// Create a new MessageWriter
+// NewMessageWriter creates a new MessageWriter.
 func NewMessageWriter(w io.Writer) *MessageWriter {
 	return &MessageWriter{w}
 }
 
-// Write a generic Message object
+// WriteMessage writes a generic Message object as created by NewMessage.
+//
 // This method is less efficient than the dedicated message functions, as it
 // has to format every part of the message.
 func (mw *MessageWriter) WriteMessage(msg *Message) {
@@ -226,7 +260,8 @@ func (mw *MessageWriter) WriteMessage(msg *Message) {
 	mw.w.Write([]byte("\n"))
 }
 
-// Write a '100 Capabilities' message
+// Capabilities writes a '100 Capabilities' message.
+//
 // Version must be non-empty. caps may be 0 for no capabilities, though
 // it probably should at least be CapSendConfig (or CapDefault)
 func (mw *MessageWriter) Capabilities(version string, caps CapFlags) {
@@ -255,17 +290,17 @@ func (mw *MessageWriter) Capabilities(version string, caps CapFlags) {
 	mw.w.Write([]byte("\n"))
 }
 
-// Write a '101 Log' message
+// Log writes a '101 Log' message.
 func (mw *MessageWriter) Log(msg string) {
 	fmt.Fprintf(mw.w, "101 Log\nMessage: %s\n\n", msg)
 }
 
-// Write a '102 Status' message
+// Status writes a '102 status' message.
 func (mw *MessageWriter) Status(msg string) {
 	fmt.Fprintf(mw.w, "102 Status\nMessage: %s\n\n", msg)
 }
 
-// Write a '103 Redirect' message
+// Redirect writes a '103 Redirect' message
 func (mw *MessageWriter) Redirect(uri, newURI, altURIs string, usedMirror bool) {
 	fmt.Fprintf(mw.w, "103 Redirect\nURI: %s\nNew-URI: %s\n", uri, newURI)
 	if usedMirror {
@@ -277,12 +312,12 @@ func (mw *MessageWriter) Redirect(uri, newURI, altURIs string, usedMirror bool) 
 	mw.w.Write([]byte("\n"))
 }
 
-// Write a '104 Warning' message
+// Warning writes a '104 Warning' message.
 func (mw *MessageWriter) Warning(msg string) {
 	fmt.Fprintf(mw.w, "104 Warning\nMessage: %s\n\n", msg)
 }
 
-// Write a '200 URI Start' message
+// StartURI writes a '200 URI Start' message.
 func (mw *MessageWriter) StartURI(uri, resumePoint string, size uint64, usedMirror bool) {
 	fmt.Fprintf(mw.w, "200 URI Start\nURI: %s\n", uri)
 	if resumePoint != "" {
@@ -297,7 +332,7 @@ func (mw *MessageWriter) StartURI(uri, resumePoint string, size uint64, usedMirr
 	mw.w.Write([]byte("\n"))
 }
 
-// Write a '201 URI Done' message
+// FinishURI writes a '201 URI Done' message.
 func (mw *MessageWriter) FinishURI(uri, filename, resumePoint, altIMSHit string, imsHit, usedMirror bool, extra ...Field) {
 	fmt.Fprintf(mw.w, "201 URI Done\nURI: %s\nFilename: %s\n", uri, filename)
 	if resumePoint != "" {
@@ -321,7 +356,7 @@ func (mw *MessageWriter) FinishURI(uri, filename, resumePoint, altIMSHit string,
 	mw.w.Write([]byte("\n"))
 }
 
-// Write a '351 Aux Request' message
+// AuxRequest writes a '351 Aux Request' message.
 func (mw *MessageWriter) AuxRequest(uri, auxURI, descShort, descLong string, maximumSize uint64, usedMirror bool) {
 	fmt.Fprintf(mw.w, "351 Aux Request\nURI: %s\n", uri)
 	if auxURI != "" {
@@ -342,7 +377,8 @@ func (mw *MessageWriter) AuxRequest(uri, auxURI, descShort, descLong string, max
 	mw.w.Write([]byte("\n"))
 }
 
-// Write a '400 URI Failure' message
+// FailedURI writes a '400 URI Failure' message.
+//
 // The message parameter should be "" unless the intent is to send a malformed
 // URI Failure message
 // failReason is only used if transientError is false
@@ -365,12 +401,12 @@ func (mw *MessageWriter) FailedURI(uri, message, failReason string, transientErr
 	mw.w.Write([]byte("\n"))
 }
 
-// Write a '401 General Failure' message
+// GeneralFailure writes a '401 General Failure' message.
 func (mw *MessageWriter) GeneralFailure(msg string) {
 	fmt.Fprintf(mw.w, "401 General Failure\nMessage: %s\n\n", msg)
 }
 
-// Write a '403 Media Change' message
+// MediaChange writes a '403 Media Change' message.
 func (mw *MessageWriter) MediaChange(media, drive string) {
 	fmt.Fprintf(mw.w, "403 Media Change\nMedia: %s\nDrive: %s\n\n", media, drive)
 }

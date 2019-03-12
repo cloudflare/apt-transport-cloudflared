@@ -71,11 +71,11 @@ func fakeExecCtxCommand(ctx context.Context, command string, args ...string) *ex
 	cmd := exec.CommandContext(ctx, os.Args[0], cs...)
 	cmd.Env = []string{"GO_WANT_HELPER_PROCESS=1"}
 
-	var entry *fakeExecEntry = nil
+	var entry *fakeExecEntry
 
 	if fakeExec.Index >= 0 && fakeExec.Index < len(fakeExec.Entries) {
 		entry = &fakeExec.Entries[fakeExec.Index]
-		fakeExec.Index += 1
+		fakeExec.Index++
 	}
 	cmd.Env = append(cmd.Env, entry.GetEnvVars()...)
 	return cmd
@@ -108,21 +108,21 @@ func TestHelperProcess(t *testing.T) {
 		return
 	}
 
-	sleep_str := os.Getenv("GO_HELPER_SLEEP")
-	if sleep_str != "" {
-		dur, err := strconv.ParseInt(sleep_str, 10, 32)
+	sleepstr := os.Getenv("GO_HELPER_SLEEP")
+	if sleepstr != "" {
+		dur, err := strconv.ParseInt(sleepstr, 10, 32)
 		if err == nil && dur > 0 {
 			time.Sleep(time.Duration(dur))
 		}
 	}
 
-	output_str := os.Getenv("GO_HELPER_OUTPUT")
-	if output_str != "" {
-		fmt.Print(output_str)
+	outputstr := os.Getenv("GO_HELPER_OUTPUT")
+	if outputstr != "" {
+		fmt.Print(outputstr)
 	}
 
 	exitcodestr := os.Getenv("GO_HELPER_EXIT_CODE")
-	var exitcode int64 = 0
+	var exitcode int64
 	if exitcodestr != "" {
 		exitcode, _ = strconv.ParseInt(exitcodestr, 10, 32)
 	}

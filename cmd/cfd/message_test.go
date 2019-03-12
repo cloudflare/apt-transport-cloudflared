@@ -115,62 +115,50 @@ func TestReadMessage_BadFieldEOF(t *testing.T) {
 	}
 }
 
+func testParseHeaderInvalid(t *testing.T, headerstr, errmsg string) {
+	_, err := ParseHeader(headerstr)
+	if err == nil {
+		t.Errorf(errmsg)
+	}
+}
+
+func testParseHeaderValid(t *testing.T, headerstr string, code uint64, desc string) {
+	msg, err := ParseHeader(headerstr)
+	if err != nil {
+		t.Errorf("Expected no error for valid header line '%s', got %v", headerstr, err)
+	}
+	if msg == nil {
+		t.Errorf("Expected valid message from valid header line '%s', got nil", headerstr)
+		return
+	}
+
+	if msg.StatusCode != code {
+		t.Errorf("Got bad status code from valid header line '%s'; expected %d, got %d", headerstr, code, msg.StatusCode)
+	}
+
+	if msg.Description != desc {
+		t.Errorf("Got bad description from valid header line '%s'; expected '%s', got '%s'", headerstr, desc, msg.Description)
+	}
+}
+
 func TestParseHeader(t *testing.T) {
 	// Valid: Standard
-	msg, err := ParseHeader("600 Acquire URI")
-	if err != nil {
-		t.Errorf("Expected no error for valid header line, got %v", err)
-	}
-	if msg == nil {
-		t.Errorf("Expected valid message from valid header line, got nil")
-	} else {
-		if msg.StatusCode != 600 {
-			t.Errorf("Got bad status code from valid header line; expected 600, got %d", msg.StatusCode)
-		}
-		if msg.Description != "Acquire URI" {
-			t.Errorf("Got bad description from valid header line; expected \"Acquire URI\", got \"%s\"", msg.Description)
-		}
-	}
-
-	// Error: Empty line
-	msg, err = ParseHeader("")
-	if err == nil {
-		t.Errorf("Expected error on empty line, got nil")
-	}
-
-	// Error: No description
-	msg, err = ParseHeader("600")
-	if err == nil {
-		t.Errorf("Expected error on missing description, got nil")
-	}
-
-	// Error: Empty description
-	msg, err = ParseHeader("600    ")
-	if err == nil {
-		t.Errorf("Expected error on empty description, got nil")
-	}
-
-	// Error: Bad Status Code - non-integer
-	msg, err = ParseHeader("Hello World")
-	if err == nil {
-		t.Errorf("Expected error on non-integer status code, got nil")
-	}
+	testParseHeaderValid(t, "600 Acquire URI", 600, "Acquire URI")
 
 	// Valid: Extra space
-	msg, err = ParseHeader("  600     Desc    ")
-	if err != nil {
-		t.Errorf("Expected no error for valid header line, got %v", err)
-	}
-	if msg == nil {
-		t.Errorf("Expected valid message from valid header line, got nil")
-	} else {
-		if msg.StatusCode != 600 {
-			t.Errorf("Got bad status code from valid header line; expected 600, got %v", msg.StatusCode)
-		}
-		if msg.Description != "Desc" {
-			t.Errorf("Got bad description from valid header line; expected \"Desc\", got %s", msg.Description)
-		}
-	}
+	testParseHeaderValid(t, "  500   Desc  ", 500, "Desc")
+
+	// Error: Empty line
+	testParseHeaderInvalid(t, "", "Expected error on empty line, got nil")
+
+	// Error: No description
+	testParseHeaderInvalid(t, "600", "Expected error on missing description, got nil")
+
+	// Error: Empty description
+	testParseHeaderInvalid(t, "600    ", "Expected error on empty description, got nil")
+
+	// Error: Bad Status Code - non-integer
+	testParseHeaderInvalid(t, "Hello World", "Expected error on non-integer status code, got nil")
 }
 
 func TestWriteMessage(t *testing.T) {

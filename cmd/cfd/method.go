@@ -25,6 +25,7 @@ const (
 	cfdVersion string = "0.1"
 )
 
+// CloudflaredMethod holds the fields needed to run the apt method.
 type CloudflaredMethod struct {
 	Context context.Context
 	Log     *log.Logger
@@ -33,6 +34,7 @@ type CloudflaredMethod struct {
 	mreader *MessageReader
 }
 
+// HeaderEntry represents a header to be added to a request.
 type HeaderEntry struct {
 	Key   string
 	Value string
@@ -43,7 +45,7 @@ type HeaderEntry struct {
 // running.
 var makeCommand = exec.CommandContext
 
-// Create a new CloudflaredMethod
+// NewCloudflaredMethod creates a new CloudflaredMethod with the given fields.
 func NewCloudflaredMethod(output io.Writer, input *bufio.Reader, logFilename string) (*CloudflaredMethod, error) {
 	var logger *log.Logger
 
@@ -60,10 +62,18 @@ func NewCloudflaredMethod(output io.Writer, input *bufio.Reader, logFilename str
 	}, nil
 }
 
-// Run the method
-func (c *CloudflaredMethod) Run() error {
-	c.mwriter.Capabilities(cfdVersion, CapSendConfig|CapSingleInstance)
-	mreader := NewMessageReader(bufio.NewReader(os.Stdin))
+// Run is the main entry point for the method.
+//
+// This function reads messages from apt indefinately and attempts to handle
+// as many of them as possible.
+func (cfd *CloudflaredMethod) Run() error {
+	return cfd.RunWithReader(os.Stdin)
+}
+
+// RunWithReader reads and dispatches methods from the given reader until EOF.
+func (cfd *CloudflaredMethod) RunWithReader(reader io.Reader) error {
+	cfd.mwriter.Capabilities(cfdVersion, CapSendConfig|CapSingleInstance)
+	mreader := NewMessageReader(bufio.NewReader(reader))
 
 	// TODO: Just in case, keep a list of URLs that need to be dispatched, but haven't
 	for {
@@ -80,17 +90,20 @@ func (c *CloudflaredMethod) Run() error {
 
 		switch msg.StatusCode {
 		case 600: // Acquire URL
-			c.HandleAcquire(msg)
+			cfd.HandleAcquire(msg)
 		case 601: // Configuration
-			c.ParseConfig(msg)
+			cfd.ParseConfig(msg)
 		default:
-			c.mwriter.GeneralFailure("Unhandled Message")
+			cfd.mwriter.GeneralFailure("Unhandled Message")
 		}
 	}
 
 	return nil
 }
 
+// GetToken uses cloudflared to acquire a token for the requested URI.
+//
+// TODO: 'native' handling of token acquisition.
 func (cfd *CloudflaredMethod) GetToken(ctx context.Context, uri *url.URL) ([]HeaderEntry, error) {
 	// TODO: Support service tokens
 	// Steps:
@@ -128,86 +141,108 @@ func (cfd *CloudflaredMethod) GetToken(ctx context.Context, uri *url.URL) ([]Hea
 		return nil, errors.New("Bad output from `cloudflared access token`: unable to get token")
 	}
 
-	return []HeaderEntry{HeaderEntry{"cf-access-token", token}}, nil
+	return []HeaderEntry{{"cf-access-token", token}}, nil
 }
 
-// Handle the 600 Acquire URI message
-// TODO: Figure out what an IMS-Hit indicates, and if that applies to this method
-func (cfd *CloudflaredMethod) HandleAcquire(msg *Message) error {
-	requestedURL := msg.Fields["URI"]
-	filename := msg.Fields["Filename"]
-	// TODO: Handle empty URI or Filename
-	// This shouldn't happen, but it's best to be absurdly fault tolerant if possible
-
-	uri, err := url.Parse(requestedURL)
-	if err != nil {
-		cfd.mwriter.FailedURI(requestedURL, "", fmt.Sprintf("URI Parse Failure: %s", err.Error()), false, false)
-		return err
-	}
-
+// BuildRequest creates a new http.Request for the given URI.
+func (cfd *CloudflaredMethod) BuildRequest(uri *url.URL) (*http.Request, error) {
 	switch uri.Scheme {
-	case "cfd+http":
-		uri.Scheme = "http"
 	case "cfd+https":
 		uri.Scheme = "https"
 	case "cfd":
 		uri.Scheme = "https"
 		cfd.mwriter.Warning("URI Scheme 'cfd' should not be used. Defaulting to cfd+https")
 	default:
-		cfd.mwriter.FailedURI(requestedURL, "", fmt.Sprintf("Invalid URI Scheme: %s", uri.Scheme), false, false)
+		return nil, fmt.Errorf("Invalid URI Scheme: '%s'", uri.Scheme)
 	}
 
-	// Fetch the token using cloudflared
-	// The context is used to cancel the cloudflared commands if they hang too long. Default should be 20 seconds
-	// TODO: Make this a header entry that supports both Bearer and Service tokens
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	headers, err := cfd.GetToken(ctx, uri)
 	if err != nil {
-		cfd.mwriter.FailedURI(requestedURL, "", err.Error(), false, false)
-		return err
+		return nil, err
 	}
 
-	// TODO: Let APT know we're getting the thing
-
-	// Build our request
 	req, err := http.NewRequest("GET", uri.String(), nil)
 	if err != nil {
-		cfd.mwriter.FailedURI(requestedURL, "", err.Error(), false, false)
-		return err
+		return nil, err
 	}
 
 	for _, h := range headers {
 		req.Header.Set(h.Key, h.Value)
 	}
 
-	resp, err := cfd.Client.Do(req)
+	return req, nil
+}
+
+// HandleAcquire handles a '600 Acquire URI' message from apt.
+//
+// This attempts to get a token for the given host and make a request for the
+// resource with the cf-access-token headers.
+//
+// TODO: Figure out what an IMS-Hit indicates, and if that applies to this method
+func (cfd *CloudflaredMethod) HandleAcquire(msg *Message) {
+	requestedURL := msg.Fields["URI"]
+	filename := msg.Fields["Filename"]
+
+	// TODO: Handle empty URI or Filename
+	// This shouldn't happen, but it's best to be absurdly fault tolerant if possible
+
+	uri, err := url.Parse(requestedURL)
+	if err != nil {
+		// Have to have started the Acquire before we can fail the acquire
+		cfd.mwriter.StartURI(requestedURL, "", 0, false)
+		cfd.mwriter.FailedURI(requestedURL, "", fmt.Sprintf("URI Parse Failure: %v", err), false, false)
+		return
+	}
+
+	err = cfd.Acquire(uri, requestedURL, filename)
 	if err != nil {
 		cfd.mwriter.FailedURI(requestedURL, "", err.Error(), false, false)
+	}
+}
+
+// ParseContentLengthHeader finds a Content-Length header and converts it to a uint64.
+func ParseContentLengthHeader(headers map[string][]string) uint64 {
+	sizeHeader, ok := headers["Content-Length"]
+	if !ok {
+		return 0
+	}
+
+	size, err := strconv.ParseUint(sizeHeader[0], 10, 64)
+	if err != nil {
+		return 0
+	}
+
+	return size
+}
+
+// Acquire fetches the requested resource.
+func (cfd *CloudflaredMethod) Acquire(uri *url.URL, requrl, filename string) error {
+	// Build our request
+	req, err := cfd.BuildRequest(uri)
+	if err != nil {
+		cfd.mwriter.StartURI(requrl, "", 0, false)
 		return err
 	}
+
+	resp, err := cfd.Client.Do(req)
+	if err != nil {
+		cfd.mwriter.StartURI(requrl, "", 0, false)
+		return err
+	}
+
 	// Handle non-200 responses
 	// TODO: Handle other 200 codes
 	if resp.StatusCode != 200 {
-		cfd.mwriter.FailedURI(requestedURL, "", resp.Status, false, false)
+		cfd.mwriter.StartURI(requrl, "", 0, false)
 		return fmt.Errorf("GET for %s failed with %s", uri.String(), resp.Status)
 	}
 
-	var size uint64
-	// Check for header: Content-Length
-	sizeHeader, ok := resp.Header["Content-Length"]
-	if ok {
-		// Base 10, 64 bits
-		size, err = strconv.ParseUint(sizeHeader[0], 10, 64)
-		if err != nil {
-			log.Printf("Error parsing Content-Length: %s\n", err.Error())
-			size = 0
-		}
-	} else {
-		size = 0
-	}
-	cfd.mwriter.StartURI(requestedURL, "", size, false)
+	size := ParseContentLengthHeader(resp.Header)
+
+	cfd.mwriter.StartURI(requrl, "", size, false)
 
 	// Close the body at the end of the method
 	defer resp.Body.Close()
@@ -223,8 +258,7 @@ func (cfd *CloudflaredMethod) HandleAcquire(msg *Message) error {
 	// And finally, we need to write to this file
 	fp, err := os.Create(filename)
 	if err != nil {
-		cfd.mwriter.GeneralFailure(fmt.Sprintf("Unable to open file %s", filename))
-		return err
+		return fmt.Errorf("Error opening file '%s': %v", filename, err)
 	}
 
 	for {
@@ -244,9 +278,7 @@ func (cfd *CloudflaredMethod) HandleAcquire(msg *Message) error {
 			if err == io.EOF {
 				break
 			}
-
-			cfd.mwriter.GeneralFailure(fmt.Sprintf("Failure while reading response body: %s", err.Error()))
-			return err
+			return fmt.Errorf("Error reading response body: %v", err)
 		}
 	}
 
@@ -255,7 +287,7 @@ func (cfd *CloudflaredMethod) HandleAcquire(msg *Message) error {
 	strSHA256 := string(hashSHA256.Sum(nil))
 	strSHA512 := string(hashSHA512.Sum(nil))
 
-	cfd.mwriter.FinishURI(requestedURL, filename, "", "", false, false,
+	cfd.mwriter.FinishURI(requrl, filename, "", "", false, false,
 		Field{"MD5-Hash", strMD5},
 		Field{"MD5Sum-Hash", strMD5},
 		Field{"SHA1-Hash", strSHA1},
@@ -266,6 +298,7 @@ func (cfd *CloudflaredMethod) HandleAcquire(msg *Message) error {
 	return nil
 }
 
+// ParseConfig takes a config message from apt and sets config values from it.
 func (cfd *CloudflaredMethod) ParseConfig(msg *Message) error {
 	return nil
 }
