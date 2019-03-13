@@ -13,10 +13,10 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+
 	//"net/http/httptrace"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -203,21 +203,6 @@ func (cfd *CloudflaredMethod) HandleAcquire(msg *Message) {
 	}
 }
 
-// ParseContentLengthHeader finds a Content-Length header and converts it to a uint64.
-func ParseContentLengthHeader(headers map[string][]string) uint64 {
-	sizeHeader, ok := headers["Content-Length"]
-	if !ok {
-		return 0
-	}
-
-	size, err := strconv.ParseUint(sizeHeader[0], 10, 64)
-	if err != nil {
-		return 0
-	}
-
-	return size
-}
-
 // Acquire fetches the requested resource.
 func (cfd *CloudflaredMethod) Acquire(uri *url.URL, requrl, filename string) error {
 	// Build our request
@@ -240,9 +225,7 @@ func (cfd *CloudflaredMethod) Acquire(uri *url.URL, requrl, filename string) err
 		return fmt.Errorf("GET for %s failed with %s", uri.String(), resp.Status)
 	}
 
-	size := ParseContentLengthHeader(resp.Header)
-
-	cfd.mwriter.StartURI(requrl, "", size, false)
+	cfd.mwriter.StartURI(requrl, "", resp.ContentLength, false)
 
 	// Close the body at the end of the method
 	defer resp.Body.Close()
@@ -261,25 +244,9 @@ func (cfd *CloudflaredMethod) Acquire(uri *url.URL, requrl, filename string) err
 		return fmt.Errorf("Error opening file '%s': %v", filename, err)
 	}
 
-	for {
-		n, err := resp.Body.Read(buffer)
-		if n > 0 {
-			// Get a slice to just what was read
-			bslice := buffer[:n]
-			// Update our hashes
-			hashMD5.Write(bslice)
-			hashSHA1.Write(bslice)
-			hashSHA256.Write(bslice)
-			hashSHA512.Write(bslice)
-			// Write to the file
-			fp.Write(bslice)
-		}
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return fmt.Errorf("Error reading response body: %v", err)
-		}
+	mw := io.MultiWriter(hashMD5, hashSHA1, hashSHA256, hashSHA512, fp)
+	if _, err := io.CopyBuffer(mw, resp.Body, buffer); err != nil {
+		return fmt.Errorf("Error reading response body: %v", err)
 	}
 
 	strMD5 := string(hashMD5.Sum(nil))

@@ -318,7 +318,7 @@ func (mw *MessageWriter) Warning(msg string) {
 }
 
 // StartURI writes a '200 URI Start' message.
-func (mw *MessageWriter) StartURI(uri, resumePoint string, size uint64, usedMirror bool) {
+func (mw *MessageWriter) StartURI(uri, resumePoint string, size int64, usedMirror bool) {
 	fmt.Fprintf(mw.w, "200 URI Start\nURI: %s\n", uri)
 	if resumePoint != "" {
 		fmt.Fprintf(mw.w, "Resume-Point: %s\n", resumePoint)
