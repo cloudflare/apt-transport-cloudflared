@@ -1,4 +1,4 @@
-package main
+package apt
 
 import (
 	"bufio"
@@ -37,10 +37,6 @@ const (
 
 	// CapAuxRequests indicates to Apt that the method handles AuxRequests.
 	CapAuxRequests CapFlags = 0x40
-
-	// CapDefault is the default value that should be sent if the method has
-	// no special considerations.
-	CapDefault CapFlags = CapSendConfig
 )
 
 // Message represents a generic message as read from os.Stdin.
@@ -109,7 +105,6 @@ func (r *MessageReader) ReadMessage() (*Message, error) {
 	var err error
 	var msg *Message
 
-	msg = nil
 	for msg == nil {
 		msg, err = r.ReadLine()
 		if err != nil {
@@ -167,10 +162,10 @@ func (r *MessageReader) ReadLine() (*Message, error) {
 		// Test for header
 		msg, err := ParseHeader(line)
 		if err != nil {
-			return nil, fmt.Errorf("Invalid field format in \"%s\"", line)
+			return nil, fmt.Errorf("invalid field format in \"%s\"", line)
 		}
 
-		return r.commitMessage(msg), errors.New("New message started without old message ending")
+		return r.commitMessage(msg), errors.New("new message started without old message ending")
 	}
 
 	key := strings.TrimSpace(parts[0])
@@ -200,23 +195,23 @@ func (r *MessageReader) readHeader() (*Message, error) {
 func ParseHeader(line string) (*Message, error) {
 	line = strings.TrimSpace(line)
 	if line == "" {
-		return nil, errors.New("Not a header spec: Empty line")
+		return nil, errors.New("not a header spec: Empty line")
 	}
 
 	parts := strings.SplitN(line, " ", 2)
 	if len(parts) != 2 {
-		return nil, fmt.Errorf("Not a header spec: \"%s\"", line)
+		return nil, fmt.Errorf("not a header spec: \"%s\"", line)
 	}
 
 	codeStr := strings.TrimSpace(parts[0])
 	code, err := strconv.ParseUint(codeStr, 10, 64)
 	if err != nil {
-		return nil, fmt.Errorf("Could not parse Status Code: %v", err)
+		return nil, fmt.Errorf("could not parse Status Code: %v", err)
 	}
 
 	desc := strings.TrimSpace(parts[1])
 	if desc == "" {
-		return nil, fmt.Errorf("Empty description header for \"%s\"", line)
+		return nil, fmt.Errorf("empty description header for \"%s\"", line)
 	}
 
 	msg := &Message{
@@ -266,25 +261,25 @@ func (mw *MessageWriter) WriteMessage(msg *Message) {
 // it probably should at least be CapSendConfig (or CapDefault)
 func (mw *MessageWriter) Capabilities(version string, caps CapFlags) {
 	fmt.Fprintf(mw.w, "100 Capabilities\nVersion: %s\n", version)
-	if 0 != caps&CapSendConfig {
+	if caps&CapSendConfig != 0 {
 		mw.w.Write([]byte("Send-Config: true\n"))
 	}
-	if 0 != caps&CapPipeline {
+	if caps&CapPipeline != 0 {
 		mw.w.Write([]byte("Pipeline: true\n"))
 	}
-	if 0 != caps&CapSingleInstance {
+	if caps&CapSingleInstance != 0 {
 		mw.w.Write([]byte("Single-Instance: true\n"))
 	}
-	if 0 != caps&CapLocalOnly {
+	if caps&CapLocalOnly != 0 {
 		mw.w.Write([]byte("Local-Only: true\n"))
 	}
-	if 0 != caps&CapNeedsCleanup {
+	if caps&CapNeedsCleanup != 0 {
 		mw.w.Write([]byte("Needs-Cleanup: true\n"))
 	}
-	if 0 != caps&CapRemovable {
+	if caps&CapRemovable != 0 {
 		mw.w.Write([]byte("Removable: true\n"))
 	}
-	if 0 != caps&CapAuxRequests {
+	if caps&CapAuxRequests != 0 {
 		mw.w.Write([]byte("AuxRequests: true\n"))
 	}
 	mw.w.Write([]byte("\n"))
@@ -333,7 +328,9 @@ func (mw *MessageWriter) StartURI(uri, resumePoint string, size int64, usedMirro
 }
 
 // FinishURI writes a '201 URI Done' message.
-func (mw *MessageWriter) FinishURI(uri, filename, resumePoint, altIMSHit string, imsHit, usedMirror bool, extra ...Field) {
+func (mw *MessageWriter) FinishURI(uri, filename, resumePoint, altIMSHit string,
+	imsHit, usedMirror bool, extra ...Field) {
+
 	fmt.Fprintf(mw.w, "201 URI Done\nURI: %s\nFilename: %s\n", uri, filename)
 	if resumePoint != "" {
 		fmt.Fprintf(mw.w, "Resume-Point: %s\n", resumePoint)

@@ -1,4 +1,4 @@
-package main
+package apt
 
 import (
 	"bufio"
@@ -133,11 +133,13 @@ func testParseHeaderValid(t *testing.T, headerstr string, code uint64, desc stri
 	}
 
 	if msg.StatusCode != code {
-		t.Errorf("Got bad status code from valid header line '%s'; expected %d, got %d", headerstr, code, msg.StatusCode)
+		t.Errorf("Got bad status code from valid header line '%s'; expected %d, got %d",
+			headerstr, code, msg.StatusCode)
 	}
 
 	if msg.Description != desc {
-		t.Errorf("Got bad description from valid header line '%s'; expected '%s', got '%s'", headerstr, desc, msg.Description)
+		t.Errorf("Got bad description from valid header line '%s'; expected '%s', got '%s'",
+			headerstr, desc, msg.Description)
 	}
 }
 

@@ -3,6 +3,7 @@ build_deps: &build_deps
   - go
   - gcc
   - build-essential
+  - golangci-lint
 
 default-flavor: stretch
 

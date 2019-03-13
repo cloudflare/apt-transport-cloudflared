@@ -1,0 +1,58 @@
+
+linters-settings:
+  govet:
+    check-shadowing: true
+  gocyclo:
+    min-complexity: 15
+  maligned:
+    suggest-new: true
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+  lll:
+    line-length: 120
+    tab-width: 4
+  prealloc:
+    simple: true
+    range-loops: true
+    for-loops: true
+  errcheck:
+      ignore: fmt:.*,[rR]ead|[wW]rite
+
+linters:
+  enable-all: false
+  disable-all: false
+  enable:
+    - deadcode
+    - depguard
+    - dupl
+    - errcheck
+    - goconst
+    - gocritic
+    - gocyclo
+    - gofmt
+    - goimports
+    - golint
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - interfacer
+    - lll
+    - maligned
+    - misspell
+    - nakedret
+    - prealloc
+    - scopelint
+    - staticcheck
+    - structcheck
+    - stylecheck
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - varcheck
+  disabled:
+    - gochecknoglobals
+    - gochecknoinits
+  fast: false
