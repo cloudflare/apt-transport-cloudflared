@@ -10,13 +10,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+    "io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
-
-	//"net/http/httptrace"
 	"os"
 	"os/exec"
+    "path"
 	"strings"
 	"time"
 )
@@ -27,17 +27,76 @@ const (
 
 // CloudflaredMethod holds the fields needed to run the apt method.
 type CloudflaredMethod struct {
-	Context context.Context
-	Log     *log.Logger
-	Client  *http.Client
-	mwriter *MessageWriter
-	mreader *MessageReader
+	Context  context.Context
+	Log      *log.Logger
+	Client   *http.Client
+	mwriter  *MessageWriter
+	mreader  *MessageReader
+    DataPath string
 }
 
 // HeaderEntry represents a header to be added to a request.
 type HeaderEntry struct {
 	Key   string
 	Value string
+}
+
+// ServiceToken represents a Cloudflare Access service token.
+type ServiceToken struct {
+    // ID is the service token ID. This is used to identify the service which
+    // is being authenticated.
+    ID     string
+    Secret string
+}
+
+// ParseServiceToken converts a compound service token consisting of a
+// Client-ID and a Client-Secret into a ServiceToken struct.
+//
+// This function expects the client data to be stored as
+//   ${CLIENT_ID}
+//   ${CLIENT_SECRET}
+// That is, the client ID on the first line of input, then the client secret
+// on the next.
+// Whitespace in the Client-ID and Client-Secret will be stripped.
+// The Client-ID must be in the form of:
+//   ID.host
+func ParseServiceToken(data string) (*ServiceToken, error) {
+    // Trim off trailing newlines, then split on newline
+    parts := strings.Split(strings.TrimSpace(data), "\n")
+
+    // We need exactly 2 parts - otherwise error
+    if len(parts) != 2 {
+        return nil, fmt.Errorf("Unable to parse Service Token; expected two lines of input, got %d", len(parts))
+    }
+
+    // TODO: validate the length/content in some fashion
+
+    // Return the token
+    return &ServiceToken{
+        ID: strings.TrimSpace(parts[0]),
+        Secret: strings.TrimSpace(parts[1]),
+    }, nil
+}
+
+// LoadServiceToken takes the given file path and parses a ServiceToken from
+// the file contents.
+//
+// If the file does not exist, then this function returns an error. See the
+// ParseServiceToken() function for more details on how service tokens are
+// parsed.
+func LoadServiceToken(filepath string) (*ServiceToken, error) {
+    fdata, err := ioutil.ReadFile(filepath)
+    if err != nil {
+        return nil, err
+    }
+
+    return ParseServiceToken(string(fdata))
+}
+
+// FindServiceToken takes the given directory and path and attempts to load a
+// service token for the given host.
+func FindServiceToken(directory, host string) (*ServiceToken, error) {
+    return LoadServiceToken(path.Join(directory, host + "-Service-Token"))
 }
 
 // For testing - we need to be able to stub out the exec.CommandContext calls
@@ -55,10 +114,11 @@ func NewCloudflaredMethod(output io.Writer, input *bufio.Reader, logFilename str
 	// TODO: Only log when needed
 	logger = nil
 	return &CloudflaredMethod{
-		Log:     logger,
-		Client:  client,
-		mwriter: NewMessageWriter(output),
-		mreader: NewMessageReader(input),
+		Log:      logger,
+		Client:   client,
+		mwriter:  NewMessageWriter(output),
+		mreader:  NewMessageReader(input),
+        DataPath: "${HOME}/.config/cfd/",
 	}, nil
 }
 
@@ -101,10 +161,40 @@ func (cfd *CloudflaredMethod) RunWithReader(reader io.Reader) error {
 	return nil
 }
 
-// GetToken uses cloudflared to acquire a token for the requested URI.
+// GetToken attempts to get a token for the requested URL.
+//
+// The token returned may be either a service token or a standard JWT. If no
+// service token could be found, and the JWT is located either by natively
+// attempting to get it or by calling an external `cloudflared` instance.
+func (cfd *CloudflaredMethod) GetToken(ctx context.Context, uri *url.URL) ([]HeaderEntry, error) {
+    tok := cfd.GetServiceToken(uri.Host)
+    if tok != nil {
+        return []HeaderEntry{
+            {"Cf-Access-Client-Id", tok.ID},
+            {"Cf-Access-Client-Secret", tok.Secret},
+        }, nil
+    }
+
+    return cfd.GetTokenCloudflared(ctx, uri)
+    // TODO: Support 'native' fetching of tokens
+}
+
+// GetServiceToken attempts to load a service token from the user
+// configurable path.
+//
+// The host parameter needs to be the hostname with no other component.
+func (cfd *CloudflaredMethod) GetServiceToken(host string) *ServiceToken {
+    token, err := FindServiceToken(path.Join(cfd.DataPath, "service-tokens"), host)
+    if err != nil {
+        return nil
+    }
+    return token
+}
+
+// GetTokenCloudflared uses cloudflared to acquire a token for the requested URI.
 //
 // TODO: 'native' handling of token acquisition.
-func (cfd *CloudflaredMethod) GetToken(ctx context.Context, uri *url.URL) ([]HeaderEntry, error) {
+func (cfd *CloudflaredMethod) GetTokenCloudflared(ctx context.Context, uri *url.URL) ([]HeaderEntry, error) {
 	// TODO: Support service tokens
 	// Steps:
 	//   1. Get the service token directory from the configuration message from Apt (default: ~/.cfd/servicetoken/)
