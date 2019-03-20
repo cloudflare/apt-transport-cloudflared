@@ -31,7 +31,7 @@ fmt:
 	gofmt -s -w cmd/cfd/*.go apt/*.go apt/**/*.go
 	goimports -w cmd/cfd/*.go apt/*.go apt/**/*.go
 
-bin/cfd+https: cmd/cfd/*.go
+bin/cfd+https: cmd/cfd/*.go apt/*.go apt/**/*.go
 	go build -o bin/cfd+https ${IMPORT_PATH}/cmd/cfd
 
 ${DEB_NAME}: clean bin/cfd+https

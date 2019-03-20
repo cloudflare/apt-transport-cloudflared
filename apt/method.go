@@ -214,10 +214,10 @@ func (cfd *CloudflaredMethod) Acquire(uri *url.URL, requrl, filename string) err
 		return fmt.Errorf("error reading response body: %v", err)
 	}
 
-	strMD5 := string(hashMD5.Sum(nil))
-	strSHA1 := string(hashSHA1.Sum(nil))
-	strSHA256 := string(hashSHA256.Sum(nil))
-	strSHA512 := string(hashSHA512.Sum(nil))
+	strMD5 := fmt.Sprintf("%x", hashMD5.Sum(nil))
+	strSHA1 := fmt.Sprintf("%x", hashSHA1.Sum(nil))
+	strSHA256 := fmt.Sprintf("%x", hashSHA256.Sum(nil))
+	strSHA512 := fmt.Sprintf("%x", hashSHA512.Sum(nil))
 
 	cfd.mwriter.FinishURI(requrl, filename, "", "", false, false,
 		Field{"MD5-Hash", strMD5},
