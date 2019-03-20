@@ -1,32 +1,32 @@
 IMPORT_PATH := github.com/cloudflare/apt-transport-cloudflared
 
-.PHONEY: all
+.PHONY: all
 all: cfd+https
 
-.PHONEY: clean
+.PHONY: clean
 clean:
 	go clean
 	rm -rf ./bin/
 
-.PHONEY: vet
+.PHONY: vet
 vet:
 	@./tools/vet.sh ./cmd/cfd ./apt ./apt/exec ./apt/access
 
-.PHONEY: check
+.PHONY: check
 check: vet
 	golangci-lint run
 
-.PHONEY: cfd+https
+.PHONY: cfd+https
 cfd+https: bin/cfd+https
 
-.PHONEY: test
+.PHONY: test
 test: check
 	go test -coverprofile=cover.out -test.v ${IMPORT_PATH}/apt
 
-.PHONEY: build
+.PHONY: build
 build: check bin/cfd+https
 
-.PHONEY: fmt
+.PHONY: fmt
 fmt:
 	gofmt -s -w cmd/cfd/*.go apt/*.go apt/**/*.go
 	goimports -w cmd/cfd/*.go apt/*.go apt/**/*.go
