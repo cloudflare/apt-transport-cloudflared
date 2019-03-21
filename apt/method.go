@@ -9,12 +9,14 @@ import (
 	"crypto/sha512"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"os/user"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -27,11 +29,11 @@ const (
 
 // CloudflaredMethod holds the fields needed to run the apt method.
 type CloudflaredMethod struct {
-	Context  context.Context
-	Log      *log.Logger
+	log      *log.Logger
+	logfp    *os.File
 	mwriter  *MessageWriter
 	mreader  *MessageReader
-	DataPath string
+	datapath string
 }
 
 // HeaderEntry represents a header to be added to a request.
@@ -40,8 +42,23 @@ type HeaderEntry struct {
 	Value string
 }
 
+func openlog(fpath string) (*os.File, error) {
+	dir := filepath.Dir(fpath)
+	_, err := os.Stat(dir)
+	if err != nil {
+		err = os.MkdirAll(dir, os.ModePerm)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// TODO: Allow user to configure append/truncate behavior
+	// Attempt to open it for append
+	return os.OpenFile(fpath, os.O_CREATE|os.O_APPEND|os.O_WRONLY|os.O_SYNC, 0600)
+}
+
 // NewCloudflaredMethod creates a new CloudflaredMethod with the given fields.
-func NewCloudflaredMethod(output io.Writer, input *bufio.Reader, logFilename string) (*CloudflaredMethod, error) {
+func NewCloudflaredMethod(output io.Writer, input *bufio.Reader) (*CloudflaredMethod, error) {
 	// Attempt to parse together the default location.
 	// Note: we run as root, so this means that our HOME directory is not the
 	// users home directory. That said, os.Getenv("HOME") should still return
@@ -56,12 +73,29 @@ func NewCloudflaredMethod(output io.Writer, input *bufio.Reader, logFilename str
 		home = curr.HomeDir
 	}
 
+	l := log.New(ioutil.Discard, "", 0)
+
+	logpath := path.Join(home, ".cloudflared/cfd/log.txt")
+	logfp, err := openlog(logpath)
+	if err == nil {
+		l.SetOutput(logfp)
+	}
+
 	return &CloudflaredMethod{
-		Log:      nil,
+		log:      l,
+		logfp:    logfp,
 		mwriter:  NewMessageWriter(output),
 		mreader:  NewMessageReader(input),
-		DataPath: path.Join(home, ".cloudflared/cfd"),
-	}, nil
+		datapath: path.Join(home, ".cloudflared/cfd/servicetokens/"),
+	}, err
+}
+
+func (cfd *CloudflaredMethod) Close() {
+	if cfd.logfp != nil {
+		cfd.logfp.Close()
+		cfd.logfp = nil
+		cfd.log.SetOutput(ioutil.Discard)
+	}
 }
 
 // Run is the main entry point for the method.
@@ -96,10 +130,13 @@ func (cfd *CloudflaredMethod) RunWithReader(reader io.Reader) error {
 		case 601: // Configuration
 			err := cfd.ParseConfig(msg)
 			if err != nil {
-				cfd.mwriter.GeneralFailure(fmt.Sprintf("Unable to parse configuration: %v", err))
+				msg := fmt.Sprintf("Unable to parse configuration: %v", err)
+				cfd.log.Printf(msg)
+				cfd.mwriter.GeneralFailure(msg)
 				return err
 			}
 		default:
+			cfd.log.Printf("Unknown message: %d %s\n", msg.StatusCode, msg.Description)
 			cfd.mwriter.GeneralFailure("Unhandled Message")
 		}
 	}
@@ -109,20 +146,19 @@ func (cfd *CloudflaredMethod) RunWithReader(reader io.Reader) error {
 
 // BuildRequest creates a new http.Request for the given URI.
 func (cfd *CloudflaredMethod) BuildRequest(client *http.Client, uri *url.URL) (*http.Request, error) {
-	switch uri.Scheme {
-	case "cfd+https":
-		uri.Scheme = "https"
-	case "cfd":
-		uri.Scheme = "https"
-		cfd.mwriter.Warning("URI Scheme 'cfd' should not be used. Defaulting to cfd+https")
-	default:
+	if uri.Scheme != "cfd+https" {
+		cfd.log.Printf("Invalid URI Scheme: '%s'", uri.Scheme)
 		return nil, fmt.Errorf("invalid URI Scheme: '%s'", uri.Scheme)
 	}
 
+	uri.Scheme = "https"
+
+	// TODO: Allow configuring this
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	token, err := access.GetToken(ctx, uri, cfd.DataPath, true)
+	cfd.log.Printf("Getting JWT for: %v\n", uri)
+	token, err := access.GetToken(ctx, uri, cfd.datapath, true)
 	if err != nil {
 		return nil, err
 	}
@@ -147,6 +183,8 @@ func (cfd *CloudflaredMethod) HandleAcquire(msg *Message) {
 	requestedURL := msg.Fields["URI"]
 	filename := msg.Fields["Filename"]
 
+	cfd.log.Printf("Handle Acquire:\n  URL: %s\n  Filename: %s", requestedURL, filename)
+
 	// TODO: Handle empty URI or Filename
 	// This shouldn't happen, but it's best to be absurdly fault tolerant if possible
 
@@ -160,6 +198,7 @@ func (cfd *CloudflaredMethod) HandleAcquire(msg *Message) {
 
 	err = cfd.Acquire(uri, requestedURL, filename)
 	if err != nil {
+		cfd.log.Printf("Error fetching %v\n%v", uri, err)
 		cfd.mwriter.FailedURI(requestedURL, "", err.Error(), false, false)
 	}
 }
@@ -232,5 +271,9 @@ func (cfd *CloudflaredMethod) Acquire(uri *url.URL, requrl, filename string) err
 
 // ParseConfig takes a config message from apt and sets config values from it.
 func (cfd *CloudflaredMethod) ParseConfig(msg *Message) error {
+	cfd.log.Println("Parsing config:")
+	for k, v := range msg.Fields {
+		cfd.log.Printf("    %s %s", k, v)
+	}
 	return nil
 }

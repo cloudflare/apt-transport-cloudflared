@@ -7,14 +7,21 @@ import (
 	"github.com/cloudflare/apt-transport-cloudflared/apt"
 )
 
-func main() {
-	cfd, err := apt.NewCloudflaredMethod(os.Stdout, bufio.NewReader(os.Stdin), "")
+func run() int {
+	cfd, err := apt.NewCloudflaredMethod(os.Stdout, bufio.NewReader(os.Stdin))
 	if err != nil {
-		return
+		return 1
 	}
+	defer cfd.Close()
+
 	err = cfd.Run()
+
 	if err != nil {
-		os.Exit(1)
+		return 1
 	}
-	os.Exit(0)
+	return 0
+}
+
+func main() {
+	os.Exit(run())
 }
