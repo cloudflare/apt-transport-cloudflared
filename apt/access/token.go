@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -56,7 +57,13 @@ type Token interface {
 // This function first attempts to load a service token for the requested URI,
 // then attempts to load a user JWT using cloudflared if no service token was
 // found.
-func GetToken(ctx context.Context, uri *url.URL, servicetokendir string, usecloudflared bool) (Token, error) {
+//
+// The writer argument is used to redirect os.Stderr from the subprocess (if
+// one is spawned). If you want to silence the output from os.Stderr, use
+// ioutil.Discard as the writer. If the writer is nil, it is implicitly
+// converted to ioutil.Discard.
+func GetToken(ctx context.Context, uri *url.URL, servicetokendir string,
+	usecloudflared bool, w io.Writer) (Token, error) {
 	// Attempt to load a service token
 	if servicetokendir != "" {
 		token, err := FindServiceToken(servicetokendir, uri.Host)
@@ -66,7 +73,7 @@ func GetToken(ctx context.Context, uri *url.URL, servicetokendir string, useclou
 	}
 
 	// Attempt to get the user token
-	return FindUserToken(ctx, uri, usecloudflared)
+	return FindUserToken(ctx, uri, usecloudflared, w)
 }
 
 // ServiceToken is a Cloudflare Access token used for services which need
@@ -140,10 +147,11 @@ type UserToken struct {
 	JWT string
 }
 
-func findTokenCloudflared(ctx context.Context, uri *url.URL) (*UserToken, error) {
+func findTokenCloudflared(ctx context.Context, uri *url.URL, w io.Writer) (*UserToken, error) {
 	baseuri := uri.Scheme + "://" + uri.Host
 
 	login := exec.CommandContext(ctx, "cloudflared", "access", "login", baseuri)
+	login.Stderr = w
 	err := login.Run()
 	if err != nil {
 		return nil, err
@@ -167,16 +175,20 @@ func findTokenCloudflared(ctx context.Context, uri *url.URL) (*UserToken, error)
 	return &UserToken{token}, nil
 }
 
-func findToken(ctx context.Context, uri *url.URL) (*UserToken, error) {
-	return findTokenCloudflared(ctx, uri)
+func findToken(ctx context.Context, uri *url.URL, w io.Writer) (*UserToken, error) {
+	return findTokenCloudflared(ctx, uri, w)
 }
 
 // FindUserToken attempts to fetch a user token for the given URI.
-func FindUserToken(ctx context.Context, uri *url.URL, cloudflared bool) (*UserToken, error) {
-	if cloudflared {
-		return findTokenCloudflared(ctx, uri)
+func FindUserToken(ctx context.Context, uri *url.URL, cloudflared bool, w io.Writer) (*UserToken, error) {
+	if w == nil {
+		w = ioutil.Discard
 	}
-	return findToken(ctx, uri)
+
+	if cloudflared {
+		return findTokenCloudflared(ctx, uri, w)
+	}
+	return findToken(ctx, uri, w)
 }
 
 func (ut *UserToken) ModifyRequest(req *http.Request) (*http.Request, error) {

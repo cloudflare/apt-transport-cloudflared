@@ -46,7 +46,7 @@ func TestParseServiceToken(t *testing.T) {
 }
 
 func testFindUserTokenError(ctx context.Context, t *testing.T, uri *url.URL, errmsg string) {
-	out, err := FindUserToken(ctx, uri, true)
+	out, err := FindUserToken(ctx, uri, true, nil)
 	if err == nil {
 		t.Errorf(errmsg, out)
 	}
@@ -87,7 +87,7 @@ func TestFindUserToken(t *testing.T) {
 	// Valid, return "token-1a24fd"
 	output := "token-1a24fd"
 	fb.Reset(exec.MockEntry{}, exec.MockEntry{Output: output})
-	out, err := FindUserToken(ctx, uri, true)
+	out, err := FindUserToken(ctx, uri, true, nil)
 	if err != nil {
 		t.Errorf("Unexpected error getting user token: %v", err)
 	} else if out.JWT != output {
