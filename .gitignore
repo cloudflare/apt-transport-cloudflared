@@ -1,5 +1,7 @@
 bin
+dist
 cover.out
+*.deb
 
 # Vim
 *.swp
