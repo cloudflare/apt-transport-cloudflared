@@ -9,14 +9,11 @@ import (
 	"crypto/sha512"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"os/user"
 	"path"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -29,8 +26,6 @@ const (
 
 // CloudflaredMethod holds the fields needed to run the apt method.
 type CloudflaredMethod struct {
-	log      *log.Logger
-	logfp    *os.File
 	mwriter  *MessageWriter
 	mreader  *MessageReader
 	datapath string
@@ -40,21 +35,6 @@ type CloudflaredMethod struct {
 type HeaderEntry struct {
 	Key   string
 	Value string
-}
-
-func openlog(fpath string) (*os.File, error) {
-	dir := filepath.Dir(fpath)
-	_, err := os.Stat(dir)
-	if err != nil {
-		err = os.MkdirAll(dir, os.ModePerm)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// TODO: Allow user to configure append/truncate behavior
-	// Attempt to open it for append
-	return os.OpenFile(fpath, os.O_CREATE|os.O_APPEND|os.O_WRONLY|os.O_SYNC, 0600)
 }
 
 // NewCloudflaredMethod creates a new CloudflaredMethod with the given fields.
@@ -73,29 +53,11 @@ func NewCloudflaredMethod(output io.Writer, input *bufio.Reader) (*CloudflaredMe
 		home = curr.HomeDir
 	}
 
-	l := log.New(ioutil.Discard, "", 0)
-
-	logpath := path.Join(home, ".cloudflared/cfd/log.txt")
-	logfp, err := openlog(logpath)
-	if err == nil {
-		l.SetOutput(logfp)
-	}
-
 	return &CloudflaredMethod{
-		log:      l,
-		logfp:    logfp,
 		mwriter:  NewMessageWriter(output),
 		mreader:  NewMessageReader(input),
 		datapath: path.Join(home, ".cloudflared/cfd/servicetokens/"),
-	}, err
-}
-
-func (cfd *CloudflaredMethod) Close() {
-	if cfd.logfp != nil {
-		cfd.logfp.Close()
-		cfd.logfp = nil
-		cfd.log.SetOutput(ioutil.Discard)
-	}
+	}, nil
 }
 
 // Run is the main entry point for the method.
@@ -131,13 +93,12 @@ func (cfd *CloudflaredMethod) RunWithReader(reader io.Reader) error {
 			err := cfd.ParseConfig(msg)
 			if err != nil {
 				msg := fmt.Sprintf("Unable to parse configuration: %v", err)
-				cfd.log.Printf(msg)
+                cfd.mwriter.Log(msg)
 				cfd.mwriter.GeneralFailure(msg)
 				return err
 			}
 		default:
-			cfd.log.Printf("Unknown message: %d %s\n", msg.StatusCode, msg.Description)
-			cfd.mwriter.GeneralFailure("Unhandled Message")
+            cfd.mwriter.Log(fmt.Sprintf("Unknown message: %d %s", msg.StatusCode, msg.Description))
 		}
 	}
 
@@ -147,7 +108,7 @@ func (cfd *CloudflaredMethod) RunWithReader(reader io.Reader) error {
 // BuildRequest creates a new http.Request for the given URI.
 func (cfd *CloudflaredMethod) BuildRequest(client *http.Client, uri *url.URL) (*http.Request, error) {
 	if uri.Scheme != "cfd+https" {
-		cfd.log.Printf("Invalid URI Scheme: '%s'", uri.Scheme)
+        cfd.mwriter.Log(fmt.Sprintf("Invalid URI Scheme: %q", uri.Scheme))
 		return nil, fmt.Errorf("invalid URI Scheme: '%s'", uri.Scheme)
 	}
 
@@ -157,7 +118,7 @@ func (cfd *CloudflaredMethod) BuildRequest(client *http.Client, uri *url.URL) (*
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	cfd.log.Printf("Getting JWT for: %v\n", uri)
+    cfd.mwriter.Log(fmt.Sprintf("Getting JWT for %v", uri))
 	urlwriter := NewURLWriter(os.Stderr, "Auth URL: ")
 	token, err := access.GetToken(ctx, uri, cfd.datapath, true, urlwriter)
 	if err != nil {
@@ -184,8 +145,6 @@ func (cfd *CloudflaredMethod) HandleAcquire(msg *Message) {
 	requestedURL := msg.Fields["URI"]
 	filename := msg.Fields["Filename"]
 
-	cfd.log.Printf("Handle Acquire:\n  URL: %s\n  Filename: %s", requestedURL, filename)
-
 	// TODO: Handle empty URI or Filename
 	// This shouldn't happen, but it's best to be absurdly fault tolerant if possible
 
@@ -199,8 +158,7 @@ func (cfd *CloudflaredMethod) HandleAcquire(msg *Message) {
 
 	err = cfd.Acquire(uri, requestedURL, filename)
 	if err != nil {
-		cfd.log.Printf("Error fetching %v\n%v", uri, err)
-		cfd.mwriter.FailedURI(requestedURL, "", err.Error(), false, false)
+		cfd.mwriter.FailedURI(requestedURL, err.Error(), err.Error(), false, false)
 	}
 }
 
@@ -272,9 +230,9 @@ func (cfd *CloudflaredMethod) Acquire(uri *url.URL, requrl, filename string) err
 
 // ParseConfig takes a config message from apt and sets config values from it.
 func (cfd *CloudflaredMethod) ParseConfig(msg *Message) error {
-	cfd.log.Println("Parsing config:")
+    cfd.mwriter.Log("cfd: Parsing config:")
 	for k, v := range msg.Fields {
-		cfd.log.Printf("    %s %s", k, v)
+        cfd.mwriter.Log(fmt.Sprintf("cfd:    %s %s", k, v))
 	}
 	return nil
 }

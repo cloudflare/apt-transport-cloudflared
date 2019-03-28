@@ -12,7 +12,6 @@ func run() int {
 	if err != nil {
 		return 1
 	}
-	defer cfd.Close()
 
 	err = cfd.Run()
 
