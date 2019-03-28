@@ -2,7 +2,7 @@ package apt
 
 import (
 	"bytes"
-    "io"
+	"io"
 	"net/url"
 	"strings"
 )
@@ -53,10 +53,10 @@ func (uw *URLWriter) commit() {
 		// Check if we have a URL, and if so print it
 		_, err := url.Parse(line)
 		if err == nil {
-            uw.writer.Write([]byte("\r"))
-            uw.writer.Write([]byte(uw.prefix))
-            uw.writer.Write([]byte(line))
-            uw.writer.Write([]byte("\n"))
+			uw.writer.Write([]byte("\r"))
+			uw.writer.Write([]byte(uw.prefix))
+			uw.writer.Write([]byte(line))
+			uw.writer.Write([]byte("\n"))
 		}
 	}
 

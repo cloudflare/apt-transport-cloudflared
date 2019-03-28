@@ -93,12 +93,12 @@ func (cfd *CloudflaredMethod) RunWithReader(reader io.Reader) error {
 			err := cfd.ParseConfig(msg)
 			if err != nil {
 				msg := fmt.Sprintf("Unable to parse configuration: %v", err)
-                cfd.mwriter.Log(msg)
+				cfd.mwriter.Log(msg)
 				cfd.mwriter.GeneralFailure(msg)
 				return err
 			}
 		default:
-            cfd.mwriter.Log(fmt.Sprintf("Unknown message: %d %s", msg.StatusCode, msg.Description))
+			cfd.mwriter.Log(fmt.Sprintf("Unknown message: %d %s", msg.StatusCode, msg.Description))
 		}
 	}
 
@@ -108,7 +108,7 @@ func (cfd *CloudflaredMethod) RunWithReader(reader io.Reader) error {
 // BuildRequest creates a new http.Request for the given URI.
 func (cfd *CloudflaredMethod) BuildRequest(client *http.Client, uri *url.URL) (*http.Request, error) {
 	if uri.Scheme != "cfd+https" {
-        cfd.mwriter.Log(fmt.Sprintf("Invalid URI Scheme: %q", uri.Scheme))
+		cfd.mwriter.Log(fmt.Sprintf("Invalid URI Scheme: %q", uri.Scheme))
 		return nil, fmt.Errorf("invalid URI Scheme: '%s'", uri.Scheme)
 	}
 
@@ -118,7 +118,7 @@ func (cfd *CloudflaredMethod) BuildRequest(client *http.Client, uri *url.URL) (*
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-    cfd.mwriter.Log(fmt.Sprintf("Getting JWT for %v", uri))
+	cfd.mwriter.Log(fmt.Sprintf("Getting JWT for %v", uri))
 	urlwriter := NewURLWriter(os.Stderr, "Auth URL: ")
 	token, err := access.GetToken(ctx, uri, cfd.datapath, true, urlwriter)
 	if err != nil {
@@ -230,9 +230,10 @@ func (cfd *CloudflaredMethod) Acquire(uri *url.URL, requrl, filename string) err
 
 // ParseConfig takes a config message from apt and sets config values from it.
 func (cfd *CloudflaredMethod) ParseConfig(msg *Message) error {
-    cfd.mwriter.Log("cfd: Parsing config:")
+	cfd.mwriter.Log("cfd: Parsing config:")
 	for k, v := range msg.Fields {
-        cfd.mwriter.Log(fmt.Sprintf("cfd:    %s %s", k, v))
+		msg := fmt.Sprintf("cfd:    %s %s", k, v)
+		cfd.mwriter.Log(msg)
 	}
 	return nil
 }

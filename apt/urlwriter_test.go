@@ -7,8 +7,7 @@ import (
 
 func TestURLWriter(t *testing.T) {
 	output := &bytes.Buffer{}
-	mwriter := NewMessageWriter(output)
-	urlw := NewURLWriter(mwriter, "URL: ")
+	urlw := NewURLWriter(output, "URL: ")
 
 	urlw.Write([]byte("Hello World\n"))
 	if output.String() != "" {
@@ -16,7 +15,7 @@ func TestURLWriter(t *testing.T) {
 	}
 
 	urlw.Write([]byte("Header line\nhttps://httpbin.org/get\nTrailing line\n"))
-	if output.String() != "101 Log\nMessage: URL: https://httpbin.org/get\n\n" {
-		t.Errorf("Unexpected output: %s\n", output.String())
+	if output.String() != "\rURL: https://httpbin.org/get\n" {
+		t.Errorf("Unexpected output: %q\n", output.String())
 	}
 }

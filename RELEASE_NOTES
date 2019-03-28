@@ -1,0 +1,19 @@
+2019.3.0
+- 2019-02-21 DEVTOOLS-4960: Initial commit
+- 2019-02-21 DEVTOOLS-4960: Fixed hang in Apt due to missing Start URI message
+- 2019-02-27 DEVTOOLS-4996: Added token handling with cloudflared
+- 2019-02-27 DEVTOOLS-5010: Added cfsetup build files
+- 2019-03-01 DEVTOOLS-5011: Added tests
+- 2019-03-12 DEVTOOLS-5093: Clean-up and refactor code
+- 2019-03-13 DEVTOOLS-5093: more idiomatic go
+- 2019-03-13 DEVTOOLS-4997: Added ServiceTokens
+- 2019-03-13 DEVTOOLS-5093: Updated linting rules
+- 2019-03-15 DEVTOOLS-5093: Moved code from cmd to library.
+- 2019-03-20 DEVTOOLS-5126: Fixed output of hash values
+- 2019-03-20 DEVTOOLS-5128: Fixed spelling of .PHONY targets
+- 2019-03-21 DEVTOOLS-5129: Added method for logging and some minimal logging
+- 2019-03-22 DEVTOOLS-5127: Added URL output for auth
+- 2019-03-25 DEVTOOLS-5136: Added steps to build .deb package
+- 2019-03-28 DEVTOOLS-5160: Fix URL display
+- 2019-03-28 DEVTOOLS-5163: Moved logging to apt messages
+
