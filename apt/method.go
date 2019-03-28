@@ -158,7 +158,7 @@ func (cfd *CloudflaredMethod) BuildRequest(client *http.Client, uri *url.URL) (*
 	defer cancel()
 
 	cfd.log.Printf("Getting JWT for: %v\n", uri)
-	urlwriter := NewURLWriter(cfd.mwriter, "Auth URL: ")
+	urlwriter := NewURLWriter(os.Stderr, "Auth URL: ")
 	token, err := access.GetToken(ctx, uri, cfd.datapath, true, urlwriter)
 	if err != nil {
 		return nil, err

@@ -11,7 +11,7 @@ all: cfd+https
 .PHONY: clean
 clean:
 	go clean
-	rm -rf ./bin/
+	rm -rf ./bin/ *.deb
 
 .PHONY: vet
 vet:
@@ -42,7 +42,7 @@ bin/cfd+https: cmd/cfd/*.go apt/*.go apt/**/*.go
 .PHONY: package
 package: ${DEB_NAME}
 
-${DEB_NAME}: clean bin/cfd+https
+${DEB_NAME}: bin/cfd+https
 	mkdir -p ${BUILD_PATH}/usr/lib/apt/methods/
 	cp bin/cfd+https ${BUILD_PATH}/usr/lib/apt/methods/cfd+https
 	fpm -t deb --deb-user root --deb-group root -s dir ${FPM_ARGS} -n ${NAME} -C ${BUILD_PATH} \

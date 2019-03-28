@@ -2,19 +2,20 @@ package apt
 
 import (
 	"bytes"
+    "io"
 	"net/url"
 	"strings"
 )
 
 // URLWriter is a io.Writer which only writes URLS
 type URLWriter struct {
-	writer *MessageWriter
+	writer io.Writer
 	buffer bytes.Buffer
 	prefix string
 }
 
 // NewURLWriter creates a new URLWriter instance.
-func NewURLWriter(w *MessageWriter, prefix string) *URLWriter {
+func NewURLWriter(w io.Writer, prefix string) *URLWriter {
 	return &URLWriter{
 		writer: w,
 		buffer: bytes.Buffer{},
@@ -52,7 +53,10 @@ func (uw *URLWriter) commit() {
 		// Check if we have a URL, and if so print it
 		_, err := url.Parse(line)
 		if err == nil {
-			uw.writer.Log(uw.prefix + line)
+            uw.writer.Write([]byte("\r"))
+            uw.writer.Write([]byte(uw.prefix))
+            uw.writer.Write([]byte(line))
+            uw.writer.Write([]byte("\n"))
 		}
 	}
 
