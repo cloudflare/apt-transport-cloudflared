@@ -1,3 +1,6 @@
+2019.4.0
+- 2019-04-01 DEVTOOLS-5188: Increased timeout to make logging in easier
+
 2019.3.0
 - 2019-02-21 DEVTOOLS-4960: Initial commit
 - 2019-02-21 DEVTOOLS-4960: Fixed hang in Apt due to missing Start URI message
