@@ -115,7 +115,7 @@ func (cfd *CloudflaredMethod) BuildRequest(client *http.Client, uri *url.URL) (*
 	uri.Scheme = "https"
 
 	// TODO: Allow configuring this
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
 	cfd.mwriter.Log(fmt.Sprintf("Getting JWT for %v", uri))
