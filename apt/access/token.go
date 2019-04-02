@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"strings"
 
@@ -150,14 +151,28 @@ type UserToken struct {
 func findTokenCloudflared(ctx context.Context, uri *url.URL, w io.Writer) (*UserToken, error) {
 	baseuri := uri.Scheme + "://" + uri.Host
 
-	login := exec.CommandContext(ctx, "cloudflared", "access", "login", baseuri)
+	var cmdLogin, cmdToken []string
+	prog := "cloudflared"
+	sudoUser := os.Getenv("SUDO_USER")
+	if sudoUser != "" {
+		prog = "su"
+		cmdLogin = append(cmdLogin, sudoUser, "-c",
+			"cloudflared access login "+baseuri)
+		cmdToken = append(cmdToken, sudoUser, "-c",
+			"cloudflared access token --app "+baseuri)
+	} else {
+		cmdLogin = append(cmdLogin, "access", "login", baseuri)
+		cmdToken = append(cmdToken, "access", "token", "--app", baseuri)
+	}
+
+	login := exec.CommandContext(ctx, prog, cmdLogin...)
 	login.Stderr = w
 	err := login.Run()
 	if err != nil {
 		return nil, err
 	}
 
-	cmd := exec.CommandContext(ctx, "cloudflared", "access", "token", "--app", baseuri)
+	cmd := exec.CommandContext(ctx, prog, cmdToken...)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, err
