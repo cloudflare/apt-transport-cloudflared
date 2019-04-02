@@ -1,3 +1,7 @@
+2019.4.1
+- 2019-03-29 DEVTOOLS-5173: Updated README, added CODEOWNERS
+- 2019-04-02 DEVTOOLS-5196: Run cloudflared as  if present
+
 2019.4.0
 - 2019-04-01 DEVTOOLS-5188: Increased timeout to make logging in easier
 

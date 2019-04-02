@@ -156,13 +156,11 @@ func findTokenCloudflared(ctx context.Context, uri *url.URL, w io.Writer) (*User
 	sudoUser := os.Getenv("SUDO_USER")
 	if sudoUser != "" {
 		prog = "su"
-		cmdLogin = append(cmdLogin, sudoUser, "-c",
-			"cloudflared access login "+baseuri)
-		cmdToken = append(cmdToken, sudoUser, "-c",
-			"cloudflared access token --app "+baseuri)
+		cmdLogin = []string{sudoUser, "-c", "cloudflared access login " + baseuri}
+		cmdToken = []string{sudoUser, "-c", "cloudflared access token --app " + baseuri}
 	} else {
-		cmdLogin = append(cmdLogin, "access", "login", baseuri)
-		cmdToken = append(cmdToken, "access", "token", "--app", baseuri)
+		cmdLogin = []string{"access", "login", baseuri}
+		cmdToken = []string{"access", "token", "--app", baseuri}
 	}
 
 	login := exec.CommandContext(ctx, prog, cmdLogin...)
