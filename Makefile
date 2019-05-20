@@ -26,7 +26,7 @@ cfd+https: bin/cfd+https
 
 .PHONY: test
 test: check
-	go test -coverprofile=cover.out -test.v ${IMPORT_PATH}/apt
+	go test -coverprofile=cover.out -test.v ${IMPORT_PATH}/apt ${IMPORT_PATH}/apt/access
 
 .PHONY: build
 build: check bin/cfd+https

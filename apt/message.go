@@ -290,9 +290,19 @@ func (mw *MessageWriter) Log(msg string) {
 	fmt.Fprintf(mw.w, "101 Log\nMessage: %s\n\n", msg)
 }
 
+// Logf writes a '101 Log' message and formats the arguments into it.
+func (mw *MessageWriter) Logf(fmtspec string, args ...interface{}) {
+	mw.Log(fmt.Sprintf(fmtspec, args...))
+}
+
 // Status writes a '102 status' message.
 func (mw *MessageWriter) Status(msg string) {
 	fmt.Fprintf(mw.w, "102 Status\nMessage: %s\n\n", msg)
+}
+
+// Statusf writes a '102 status' message and formats the arguments into if.
+func (mw *MessageWriter) Statusf(fmtspec string, args ...interface{}) {
+	mw.Status(fmt.Sprintf(fmtspec, args...))
 }
 
 // Redirect writes a '103 Redirect' message
@@ -310,6 +320,11 @@ func (mw *MessageWriter) Redirect(uri, newURI, altURIs string, usedMirror bool) 
 // Warning writes a '104 Warning' message.
 func (mw *MessageWriter) Warning(msg string) {
 	fmt.Fprintf(mw.w, "104 Warning\nMessage: %s\n\n", msg)
+}
+
+// Warningf writes a '104 Warning' message and formats the arguments into it.
+func (mw *MessageWriter) Warningf(fmtspec string, args ...interface{}) {
+	mw.Warning(fmt.Sprintf(fmtspec, args...))
 }
 
 // StartURI writes a '200 URI Start' message.
@@ -401,6 +416,12 @@ func (mw *MessageWriter) FailedURI(uri, message, failReason string, transientErr
 // GeneralFailure writes a '401 General Failure' message.
 func (mw *MessageWriter) GeneralFailure(msg string) {
 	fmt.Fprintf(mw.w, "401 General Failure\nMessage: %s\n\n", msg)
+}
+
+// GeneralFailuref writes a '401 General Failure' message and formats the
+// arguments into it.
+func (mw *MessageWriter) GeneralFailuref(fmtspec string, args ...interface{}) {
+	mw.GeneralFailure(fmt.Sprintf(fmtspec, args...))
 }
 
 // MediaChange writes a '403 Media Change' message.
