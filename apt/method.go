@@ -64,25 +64,18 @@ func NewCloudflaredMethod(output io.Writer, input *bufio.Reader) (*CloudflaredMe
 //
 // This function reads messages from apt indefinitely and attempts to handle
 // as many of them as possible.
-func (cfd *CloudflaredMethod) Run() error {
-	return cfd.RunWithReader(os.Stdin)
-}
-
-// RunWithReader reads and dispatches methods from the given reader until EOF.
-func (cfd *CloudflaredMethod) RunWithReader(reader io.Reader) error {
+func (cfd *CloudflaredMethod) Run() bool {
 	cfd.mwriter.Capabilities(cfdVersion, CapSendConfig|CapSingleInstance)
-	mreader := NewMessageReader(bufio.NewReader(reader))
-
-	// TODO: Just in case, keep a list of URLs that need to be dispatched, but haven't
 	for {
-		msg, err := mreader.ReadMessage()
+		msg, err := cfd.mreader.ReadMessage()
 		if err != nil {
 			if err == io.EOF || err == io.ErrClosedPipe {
-				break
+				return true
 			}
 
 			if !(err == io.ErrNoProgress || err == io.ErrShortBuffer) {
-				return err
+				cfd.mwriter.GeneralFailuref("Error reading message: %v", err)
+				return false
 			}
 		}
 
@@ -95,14 +88,12 @@ func (cfd *CloudflaredMethod) RunWithReader(reader io.Reader) error {
 				msg := fmt.Sprintf("Unable to parse configuration: %v", err)
 				cfd.mwriter.Log(msg)
 				cfd.mwriter.GeneralFailure(msg)
-				return err
+				return false
 			}
 		default:
 			cfd.mwriter.Log(fmt.Sprintf("Unknown message: %d %s", msg.StatusCode, msg.Description))
 		}
 	}
-
-	return nil
 }
 
 // BuildRequest creates a new http.Request for the given URI.
