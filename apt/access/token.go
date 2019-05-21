@@ -15,42 +15,35 @@ import (
 	"github.com/cloudflare/apt-transport-cloudflared/apt/exec"
 )
 
-const (
-	errSvcParseParts = "parse expected two lines of input, got %d"
-)
-
 // Transport takes a Token and applies it to any requests sent using it.
 type Transport struct {
-	AuthToken Token
+	authToken Token
 	parent    http.RoundTripper
 }
 
 // NewTransport returns a new AccessRountTripper set to use the given
 // token and parent round-tripper.
 func NewTransport(token Token, rt http.RoundTripper) *Transport {
+	if rt == nil {
+		rt = http.DefaultTransport
+	}
+
 	return &Transport{
-		AuthToken: token,
+		authToken: token,
 		parent:    rt,
 	}
 }
 
 // RoundTrip applies the token headers to the request and gets a response.
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if t.parent == nil {
-		t.parent = http.DefaultTransport
-	}
+	t.authToken.ModifyRequest(req)
 
-	mreq, err := t.AuthToken.ModifyRequest(req)
-	if err != nil {
-		return nil, err
-	}
-
-	return t.parent.RoundTrip(mreq)
+	return t.parent.RoundTrip(req)
 }
 
 // Token is the interface to both types of token.
 type Token interface {
-	ModifyRequest(r *http.Request) (*http.Request, error)
+	ModifyRequest(r *http.Request)
 }
 
 // GetToken attempts to get a token for the given uri.
@@ -104,10 +97,9 @@ func ParseServiceToken(data string) (*ServiceToken, error) {
 
 	// We need exactly 2 parts - otherwise error
 	if len(parts) != 2 {
-		return nil, fmt.Errorf(errSvcParseParts, len(parts))
+		return nil, fmt.Errorf("parse expected two lines of input, got %d", len(parts))
 	}
 
-	// TODO: Validate the length/content in some fashion
 	return &ServiceToken{
 		ID:     strings.TrimSpace(parts[0]),
 		Secret: strings.TrimSpace(parts[1]),
@@ -136,10 +128,9 @@ func FindServiceToken(directory, host string) (*ServiceToken, error) {
 }
 
 // ModifyRequest sets the request headers to the given token values.
-func (st *ServiceToken) ModifyRequest(req *http.Request) (*http.Request, error) {
+func (st *ServiceToken) ModifyRequest(req *http.Request) {
 	req.Header.Set("Cf-Access-Client-Id", st.ID)
 	req.Header.Set("Cf-Access-Client-Secret", st.Secret)
-	return req, nil
 }
 
 // UserToken represents a user token for the given service.
@@ -189,6 +180,7 @@ func findTokenCloudflared(ctx context.Context, uri *url.URL, w io.Writer) (*User
 }
 
 func findToken(ctx context.Context, uri *url.URL, w io.Writer) (*UserToken, error) {
+	// TODO: Use cloudflared library directly
 	return findTokenCloudflared(ctx, uri, w)
 }
 
@@ -204,7 +196,6 @@ func FindUserToken(ctx context.Context, uri *url.URL, cloudflared bool, w io.Wri
 	return findToken(ctx, uri, w)
 }
 
-func (ut *UserToken) ModifyRequest(req *http.Request) (*http.Request, error) {
+func (ut *UserToken) ModifyRequest(req *http.Request) {
 	req.Header.Set("Cf-Access-Token", ut.JWT)
-	return req, nil
 }
