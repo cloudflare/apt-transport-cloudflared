@@ -26,9 +26,12 @@ const (
 
 // CloudflaredMethod holds the fields needed to run the apt method.
 type CloudflaredMethod struct {
-	mwriter  *MessageWriter
-	mreader  *MessageReader
-	datapath string
+	mwriter   *MessageWriter
+	mreader   *MessageReader
+	urlwriter *URLWriter
+	datapath  string
+	client    *http.Client
+	transport http.RoundTripper
 }
 
 // HeaderEntry represents a header to be added to a request.
@@ -38,7 +41,7 @@ type HeaderEntry struct {
 }
 
 // NewCloudflaredMethod creates a new CloudflaredMethod with the given fields.
-func NewCloudflaredMethod(output io.Writer, input *bufio.Reader) (*CloudflaredMethod, error) {
+func NewCloudflaredMethod(client *http.Client, output io.Writer, input *bufio.Reader) (*CloudflaredMethod, error) {
 	// Attempt to parse together the default location.
 	// Note: we run as root, so this means that our HOME directory is not the
 	// users home directory. That said, os.Getenv("HOME") should still return
@@ -53,10 +56,17 @@ func NewCloudflaredMethod(output io.Writer, input *bufio.Reader) (*CloudflaredMe
 		home = curr.HomeDir
 	}
 
+	if client == nil {
+		client = http.DefaultClient
+	}
+
 	return &CloudflaredMethod{
-		mwriter:  NewMessageWriter(output),
-		mreader:  NewMessageReader(input),
-		datapath: path.Join(home, ".cloudflared/cfd/servicetokens/"),
+		mwriter:   NewMessageWriter(output),
+		mreader:   NewMessageReader(input),
+		datapath:  path.Join(home, ".cloudflared/cfd/servicetokens/"),
+		urlwriter: NewURLWriter(os.Stderr, "Auth URL: "),
+		client:    client,
+		transport: client.Transport,
 	}, nil
 }
 
@@ -110,13 +120,12 @@ func (cfd *CloudflaredMethod) BuildRequest(client *http.Client, uri *url.URL) (*
 	defer cancel()
 
 	cfd.mwriter.Log(fmt.Sprintf("Getting JWT for %v", uri))
-	urlwriter := NewURLWriter(os.Stderr, "Auth URL: ")
-	token, err := access.GetToken(ctx, uri, cfd.datapath, true, urlwriter)
+	token, err := access.GetToken(ctx, uri, cfd.datapath, true, cfd.urlwriter)
 	if err != nil {
 		return nil, err
 	}
 
-	client.Transport = access.NewTransport(token, client.Transport)
+	cfd.client.Transport = access.NewTransport(token, cfd.transport)
 
 	req, err := http.NewRequest("GET", uri.String(), nil)
 	if err != nil {
@@ -155,18 +164,15 @@ func (cfd *CloudflaredMethod) HandleAcquire(msg *Message) {
 
 // Acquire fetches the requested resource.
 func (cfd *CloudflaredMethod) Acquire(uri *url.URL, requrl, filename string) error {
-	// Set up a client - we don't want to share a client, because we may want to
-	// allow pipelining requests and that would mean changing the token.
-	client := &http.Client{}
 
 	// Build our request
-	req, err := cfd.BuildRequest(client, uri)
+	req, err := cfd.BuildRequest(cfd.client, uri)
 	if err != nil {
 		cfd.mwriter.StartURI(requrl, "", 0, false)
 		return err
 	}
 
-	resp, err := client.Do(req)
+	resp, err := cfd.client.Do(req)
 	if err != nil {
 		cfd.mwriter.StartURI(requrl, "", 0, false)
 		return err

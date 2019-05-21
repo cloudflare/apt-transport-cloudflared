@@ -9,7 +9,7 @@ import (
 func TestParseConfig(t *testing.T) {
 	var output strings.Builder
 	input := strings.NewReader("601 Configuration\nApt::Acquire::Something Blah\n\n")
-	method, _ := NewCloudflaredMethod(&output, bufio.NewReader(input))
+	method, _ := NewCloudflaredMethod(nil, &output, bufio.NewReader(input))
 	// Replace the client with something that doesn't actually do anything
 	msg := NewMessage(601, "Configuration", Field{"key", "value"})
 	err := method.ParseConfig(msg)

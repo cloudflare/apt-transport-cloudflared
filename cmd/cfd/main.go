@@ -9,7 +9,7 @@ import (
 )
 
 func run(outfp io.Writer, infp io.Reader) int {
-	cfd, err := apt.NewCloudflaredMethod(outfp, bufio.NewReader(infp))
+	cfd, err := apt.NewCloudflaredMethod(nil, outfp, bufio.NewReader(infp))
 	if err != nil {
 		return 1
 	}
