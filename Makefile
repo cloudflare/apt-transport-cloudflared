@@ -1,9 +1,8 @@
-IMPORT_PATH := github.com/cloudflare/apt-transport-cloudflared
 VERSION     := $(shell git describe --tags --always --dirty=-dev)
-NAME        := cloudflared-apt-transport
+NAME        := apt-transport-cloudflared
 BUILD_PATH  := dist
-DEB_NAME    := cloudflared-apt-transport_${VERSION}_amd64.deb
-FPM_ARGS    := --provides cfsetup -v ${VERSION}
+DEB_NAME    := apt-transport-cloudflared_${VERSION}_amd64.deb
+FPM_ARGS    := --provides apt-transport-cloudflared -v ${VERSION}
 
 .PHONY: all
 all: cfd+https
@@ -26,7 +25,7 @@ cfd+https: bin/cfd+https
 
 .PHONY: test
 test: check
-	go test -coverprofile=cover.out -test.v ${IMPORT_PATH}/apt ${IMPORT_PATH}/apt/access
+	go test -coverprofile=cover.out -test.v ./apt ./apt/access
 
 .PHONY: build
 build: check bin/cfd+https
@@ -37,7 +36,7 @@ fmt:
 	goimports -w cmd/cfd/*.go apt/*.go apt/**/*.go
 
 bin/cfd+https: cmd/cfd/*.go apt/*.go apt/**/*.go
-	go build -o bin/cfd+https ${IMPORT_PATH}/cmd/cfd
+	go build -o bin/cfd+https ./cmd/cfd
 
 .PHONY: package
 package: ${DEB_NAME}
