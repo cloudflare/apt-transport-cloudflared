@@ -47,3 +47,34 @@ running the `apt update` or `apt install` commands, e.g
 $ cloudflared access login https://my.apt-repo.org
 $ sudo apt update && sudo apt install ${PACKAGES}
 ```
+
+Service Tokens
+==============
+As an extension, the apt-transport-cloudflared package supports using
+service tokens to authenticate with Access. Service token support is
+implemented through two headers, one for the client ID and one for the
+client secret. These values are passed to the service using the
+`CF-Access-Client-ID` and `CF-Acess-Client-Secret` headers,
+respectively.
+
+Service tokens are accessed from `${HOME}/.cloudflared/servicetokens/`
+with a filename corresponding to the root URL of the repository, and
+are expected to have the following contents:
+
+```
+${CLIENT_ID}
+${CLIENT_SECRET}
+```
+
+As an example, given a repository at `access.widgetcorp.tech` which
+uses Access, in order to use a service token you would add a file to
+`${HOME}/.cloudflared/servicetokens/access.widgetcorp.tech-Service-Token`
+with the following contents:
+
+```
+bd2744144725d2651d39363df6807599.access.widgetcorp.tech
+3e2c2ad371b00777a443f0c639c1e03687e4fcf73e0c3371cb1cbd6124b123fdef782a
+```
+
+Since the service tokens are already valid as is, using them does not
+require `cloudflared`.
