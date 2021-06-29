@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudflared/apt-transport-cloudflare/apt/exec"
+	"github.com/cloudflare/apt-transport-cloudflared/apt/exec"
 )
 
 func TestHelperProcess(t *testing.T) {
