@@ -57,7 +57,7 @@ client secret. These values are passed to the service using the
 `CF-Access-Client-ID` and `CF-Acess-Client-Secret` headers,
 respectively.
 
-Service tokens are accessed from `${HOME}/.cloudflared/servicetokens/`
+Service tokens are accessed from `${HOME}/.cloudflared/cfd/servicetokens/`
 with a filename corresponding to the root URL of the repository, and
 are expected to have the following contents:
 
@@ -68,7 +68,7 @@ ${CLIENT_SECRET}
 
 As an example, given a repository at `access.widgetcorp.tech` which
 uses Access, in order to use a service token you would add a file to
-`${HOME}/.cloudflared/servicetokens/access.widgetcorp.tech-Service-Token`
+`${HOME}/.cloudflared/cfd/servicetokens/access.widgetcorp.tech-Service-Token`
 with the following contents:
 
 ```
